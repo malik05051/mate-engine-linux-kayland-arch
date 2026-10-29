@@ -34,22 +34,20 @@ pointer source through `BaseInput.inputOverride` and delivers text to focused
 Avatar Controls fields. A 250 ms heartbeat lets the
 Unity bridge restore its source window if the presenter stops.
 
-Run the wrapped, reproducible package from the repository root:
+Build it against the system Qt 6 (`qt6-base`, `qt6-wayland`, and
+`layer-shell-qt` on Arch) from the repository root, then run it:
 
 ```sh
-env -u DISPLAY QT_QPA_PLATFORM=wayland nix run .#wayland-presenter
+./scripts/build-wayland-presenter.sh
+env -u DISPLAY QT_QPA_PLATFORM=wayland ./Native/WaylandPresenter/build/matee-wayland-presenter
 ```
 
 To consume frames from a player started with the bridge environment variable:
 
 ```sh
-env -u DISPLAY QT_QPA_PLATFORM=wayland nix run .#wayland-presenter -- \
+env -u DISPLAY QT_QPA_PLATFORM=wayland ./Native/WaylandPresenter/build/matee-wayland-presenter \
   --frame-file "$XDG_RUNTIME_DIR/matee-presenter.frames"
 ```
-
-For an iterative development build, enter `nix develop` and run
-`scripts/build-wayland-presenter.sh`. The raw build-tree executable is not
-wrapped with Qt plugin paths; use the flake app for runtime validation.
 
 With `WAYLAND_DEBUG=client`, a successful run includes
 `zwlr_layer_shell_v1.get_layer_surface` and `wl_surface.set_input_region`.

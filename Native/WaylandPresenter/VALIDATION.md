@@ -1,21 +1,25 @@
 # Window sitting validation
 
-Run from the repository root. Unity Editor 6000.2.6f2 and the flake development
-environment are required for the player checks. Do not change global display or
+Run from the repository root. Unity Editor 6000.2.6f2 and the Arch packages from
+`scripts/install-arch-deps.sh` are required for the player checks. Do not change global display or
 compositor settings automatically to satisfy this matrix.
 
 ## Automated checks
 
+Set `UNITY_EDITOR_PATH` to the Editor, for example
+`~/.local/share/mate-engine/unity/6000.2.6f2/Editor/Unity` after
+`scripts/install-unity-editor.sh`.
+
 ```sh
-nix develop -c node tests/desktop-observer.test.cjs
-nix develop -c unity -batchmode -quit -nographics -projectPath "$PWD" \
+node tests/desktop-observer.test.cjs
+"$UNITY_EDITOR_PATH" -batchmode -quit -nographics -projectPath "$PWD" \
   -job-worker-count 4 -logFile /tmp/matee-sitting-tests.log \
   -executeMethod WaylandSittingTests.Run
-nix develop -c unity -batchmode -quit -nographics -projectPath "$PWD" \
+"$UNITY_EDITOR_PATH" -batchmode -quit -nographics -projectPath "$PWD" \
   -job-worker-count 4 -logFile /tmp/matee-sitting-handler-tests.log \
   -executeMethod WaylandSittingTests.RunHandler
-nix develop -c bash -c 'cmake -S Native/WaylandPresenter -B /tmp/matee-presenter-tests -DBUILD_TESTING=ON && cmake --build /tmp/matee-presenter-tests -j4 && ctest --test-dir /tmp/matee-presenter-tests --output-on-failure'
-nix develop -c ./build.sh build
+cmake -S Native/WaylandPresenter -B /tmp/matee-presenter-tests -DBUILD_TESTING=ON && cmake --build /tmp/matee-presenter-tests -j4 && ctest --test-dir /tmp/matee-presenter-tests --output-on-failure
+./build.sh build
 ```
 
 The observer test exercises events, visibility, panel auto-hide, desktop/activity
@@ -26,8 +30,8 @@ hip outside the snap band with a stationary cursor, verifies held dragging prese
 seat alignment, and checks incremental sliding and intentional drag-away. The native test verifies protocol rejection and conservative
 input masks under scaling and vertical flipping.
 
-An optional live test uses Python with dbus-python and PyGObject from the Nix
-development shell. It briefly displays a test
+An optional live test uses Python with dbus-python and PyGObject
+(`python-dbus` and `python-gobject` on Arch). It briefly displays a test
 rectangle on each attached output, checks KWin geometry and layer state, and
 checks that stale frames stop the heartbeat. It loads and unloads its own
 read-only KWin observer and leaves diagnostic evidence in a unique `/tmp` folder.
@@ -36,7 +40,7 @@ tries the next script ID, matching the player's startup recovery.
 It does not test the animated pet's seat alignment.
 
 ```sh
-nix develop -c python3 tests/wayland-presenter-live.py ./build/matee-wayland-presenter
+python3 tests/wayland-presenter-live.py ./build/matee-wayland-presenter
 ```
 
 ## Interactive acceptance
