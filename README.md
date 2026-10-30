@@ -50,8 +50,9 @@ PulseAudio compatibility service for audio application detection.
   save presets, and restore imported defaults without modifying the model file.
 - **Avatar library cleanup:** Loading the library removes entries for missing
   files or invalid paths while retaining model files and thumbnails.
-- **Pinned builds and portable export:** The Nix environment pins the Unity
-  Editor and native tooling; the exporter bundles the presenter's Qt runtime.
+- **Native Arch builds and portable export:** Helper scripts install the Arch
+  packages and a checksum-verified, pinned Unity Editor; the exporter copies a
+  player directory for other Arch/KDE machines.
 
 ### How automatic model detection works
 
@@ -87,55 +88,59 @@ The development baseline uses Arch Linux and Unity `6000.2.6f2`.
 
 ## Build and run
 
-You need KDE Plasma 6 in a Wayland session, KWin layer-shell support, and
-Nix with flakes enabled. The pinned development environment supplies
-Unity `6000.2.6f2` and the native build dependencies. `build.sh` runs Unity in
-batch mode, so it needs no Unity account, Unity Hub, or license activation.
+You need Arch Linux (or a derivative) running KDE Plasma 6 in a Wayland session.
+Everything builds against the system's own packages: the presenter uses the
+host Qt 6 and `layer-shell-qt`, and Unity uses the host GPU drivers directly.
+`build.sh` runs Unity in batch mode, so it needs no Unity account, Unity Hub, or
+license activation.
 
 From the repository root:
 
 ```sh
-nix develop
+./scripts/install-arch-deps.sh
+./scripts/install-unity-editor.sh
 ./build.sh ./Build
 cd Build
 env -u DISPLAY ./launch.sh
 ```
 
-The first setup downloads about 4.1 GiB for the Editor plus runtime dependencies.
-The first import and build can take several minutes. Keep the ignored `Library/`
-directory to reuse Unity's asset and shader caches.
+`install-arch-deps.sh` installs the build and runtime packages with pacman.
+`install-unity-editor.sh` downloads the pinned Unity `6000.2.6f2` Editor (about
+4 GiB, checksum-verified) to `~/.local/share/mate-engine/unity`, where
+`build.sh` finds it. To use an Editor installed elsewhere, such as through Unity
+Hub, set `UNITY_EDITOR_PATH`. The first import and build can take several
+minutes. Keep the ignored `Library/` directory to reuse Unity's asset and
+shader caches.
 
 The build compiles the `StandaloneFileBrowser` native plugin from source, builds
-the Unity player, and packages the native Wayland presenter. Use `launch.sh` to
-start the player: it selects native Wayland and starts the presenter. Confirm
-`Selected window backend: wayland` in the Unity player log.
+the Unity player, and builds and packages the native Wayland presenter. Use
+`launch.sh` to start the player: it selects native Wayland and starts the
+presenter. Confirm `Selected window backend: wayland` in the Unity player log.
 
-`build.sh` needs a graphical session and GPU access from inside Nix, because
-Unity must have a graphics device while building; without one, the player shows
-a broken splash screen. The pinned environment bundles Mesa, which covers AMD
-and Intel GPUs. On other drivers, such as NVIDIA's proprietary driver, run the
-build through [nixGL](https://github.com/nix-community/nixGL) (for example
-`nixGL ./build.sh ./Build`); `build.sh` warns when Unity found no GPU. On a
-machine without a display, `MATEENGINE_BUILD_HEADLESS=1 ./build.sh ./Build`
+`build.sh` needs a graphical session and GPU access, because Unity must have a
+graphics device while building; without one, the player shows a broken splash
+screen. Install your GPU's drivers as usual (`mesa` with `vulkan-radeon` or
+`vulkan-intel`, or `nvidia-utils`); `build.sh` warns when Unity found no GPU. On
+a machine without a display, `MATEENGINE_BUILD_HEADLESS=1 ./build.sh ./Build`
 still builds for quick iteration, but don't publish the result.
 
 ### Building from the Editor
 
 You can also build from the Unity Editor GUI. Unlike `build.sh`, the Editor
 requires signing in to your own Unity account and activating a license (Unity
-Personal is enough) through Unity Hub:
+Personal is enough) through Unity Hub, available from the AUR as
+[`unityhub`](https://aur.archlinux.org/packages/unityhub):
 
 ```sh
-nix run .#unityhub
+yay -S unityhub
 ```
 
 Then open the project:
 
 ```sh
-nix develop
 ./scripts/build-file-browser.sh
 ./scripts/prepare-llamalib.sh
-unity -projectPath "$PWD"
+~/.local/share/mate-engine/unity/6000.2.6f2/Editor/Unity -projectPath "$PWD"
 ```
 
 Choose **MateEngine > Build Linux Player...**, select the `Build` folder, and
@@ -151,19 +156,17 @@ and troubleshooting.
 
 ### Portable export
 
-For a portable player, build the file-browser plugin against the destination
-loader and host GTK libraries, then export into a new directory:
+To copy a player to another machine, export it into a new directory:
 
 ```sh
 MATEENGINE_PORTABLE_PLUGIN=1 ./build.sh ./Build
-nix run .#export-portable -- ./Build ./MateEngine-portable
+./scripts/export-portable.sh ./Build ./MateEngine-portable
 ```
 
-The destination must not already exist. The exported directory bundles the
-presenter's Qt runtime and is intended to run without Nix on the destination.
-It still needs compatible x86-64 Linux host libraries, graphics drivers, KDE
-Wayland, and AppImage runtime support. Test it on the target machine before
-sharing it. See [portable export instructions](usage.md#build-a-player).
+The destination must not already exist. The presenter links against the host
+Qt 6, so the target machine needs `qt6-base`, `qt6-wayland`, `layer-shell-qt`,
+GTK 3, graphics drivers, and KDE Plasma 6 on Wayland. Test it on the target
+machine before sharing it. See [portable export instructions](usage.md#build-a-player).
 
 ## Using your companion
 

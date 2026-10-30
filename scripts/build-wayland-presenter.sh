@@ -6,6 +6,11 @@ project_dir="$(cd -- "$script_dir/.." && pwd)"
 source_dir="$project_dir/Native/WaylandPresenter"
 build_dir="$source_dir/build"
 
+if ! command -v cmake >/dev/null 2>&1; then
+    printf 'cmake was not found; run ./scripts/install-arch-deps.sh first.\n' >&2
+    exit 1
+fi
+
 cmake -S "$source_dir" -B "$build_dir" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$build_dir" --parallel
 printf 'Built native Wayland presenter: %s\n' "$build_dir/matee-wayland-presenter"

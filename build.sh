@@ -15,11 +15,20 @@ fi
 unity_editor="${UNITY_EDITOR_PATH:-${UNITY_EDITOR:-}}"
 if [[ -z "$unity_editor" ]]; then
     unity_editor="$(command -v unity || true)"
-    unity_editor="${unity_editor:-$HOME/Unity/Hub/Editor/6000.2.6f2/Editor/Unity}"
+fi
+if [[ -z "$unity_editor" ]]; then
+    default_editor="${MATEENGINE_UNITY_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/mate-engine/unity}/6000.2.6f2/Editor/Unity"
+    for candidate in "$default_editor" "$HOME/Unity/Hub/Editor/6000.2.6f2/Editor/Unity"; do
+        if [[ -x "$candidate" ]]; then
+            unity_editor="$candidate"
+            break
+        fi
+    done
+    unity_editor="${unity_editor:-$default_editor}"
 fi
 if [[ ! -x "$unity_editor" ]]; then
     printf 'Unity 6000.2.6f2 editor was not found at: %s\n' "$unity_editor" >&2
-    printf 'Run this build inside nix develop, or set UNITY_EDITOR_PATH to an installed Unity executable.\n' >&2
+    printf 'Run ./scripts/install-unity-editor.sh, or set UNITY_EDITOR_PATH to an installed Unity executable.\n' >&2
     exit 1
 fi
 
@@ -51,12 +60,12 @@ fi
     -job-worker-count "$job_worker_count" -logFile "$build_log" \
     -executeMethod CliBuilder.Build --output "$output_path"
 
-# Unity falls back to a null device when it cannot reach the GPU from inside
-# Nix (for example with NVIDIA's proprietary driver); that build has the same
-# broken splash screen as -nographics.
+# Unity falls back to a null device when it cannot reach the GPU (no graphical
+# session, or missing host drivers); that build has the same broken splash
+# screen as -nographics.
 if [[ "${MATEENGINE_BUILD_HEADLESS:-0}" != 1 ]] && grep -q "NullGfxDevice" "$build_log"; then
     printf 'WARNING: Unity found no GPU during the build; the player will show a broken splash screen.\n' >&2
-    printf 'WARNING: Expose host graphics to Nix, for example: nixGL ./build.sh %s\n' "$1" >&2
+    printf 'WARNING: Run the build from a graphical session with working GPU drivers (mesa or nvidia-utils).\n' >&2
 fi
 
 # LLMUnity should leave only Linux LlamaLib libraries in a Linux player.

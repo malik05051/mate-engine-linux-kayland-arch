@@ -8,8 +8,9 @@ and pointer position back to Unity.
 
 ## Requirements
 
-- KDE Plasma 6 in a Wayland session
-- Nix with flakes enabled
+- Arch Linux (or a derivative) running KDE Plasma 6 in a Wayland session
+- The packages from `./scripts/install-arch-deps.sh` and the pinned Unity
+  Editor from `./scripts/install-unity-editor.sh`
 - For the Unity Editor GUI only: a Unity account with a Unity Personal or other
   suitable license activated for Unity `6000.2.6f2`. `build.sh` needs no
   account or license.
@@ -25,16 +26,21 @@ printf 'session=%s wayland=%s display=%s\n' \
 
 ## Build a player
 
-From a graphical session, enter the pinned development environment and build to
-a local output directory:
+From a graphical session, install the dependencies once and build to a local
+output directory:
 
 ```sh
-nix develop
+./scripts/install-arch-deps.sh
+./scripts/install-unity-editor.sh
 ./build.sh ./Build
 ```
 
-The first `nix develop` downloads the pinned Unity Editor and native build
-dependencies. `build.sh` builds the reviewed StandaloneFileBrowser plugin, runs
+`install-unity-editor.sh` downloads the pinned Unity Editor (about 4 GiB),
+verifies its SHA-256 checksum, and installs it to
+`~/.local/share/mate-engine/unity/6000.2.6f2`. Set `MATEENGINE_UNITY_ROOT` to
+install somewhere else. `build.sh` looks for the Editor in `UNITY_EDITOR_PATH`,
+then `unity` on `PATH`, then that install location, then Unity Hub's default
+`~/Unity/Hub/Editor/6000.2.6f2`. `build.sh` builds the reviewed StandaloneFileBrowser plugin, runs
 Unity in batch mode, builds the native presenter, and places the presenter next
 to `Build/MateEngineX.x86_64`. Batch mode needs no Unity account, Unity Hub, or
 license activation.
@@ -45,10 +51,9 @@ and reuses the `Library/` cache. Re-export any portable copy afterwards.
 `build.sh` runs Unity in batch mode with a graphics device. Building with
 `-nographics`, or without GPU access, produces player data that renders a
 broken splash screen, so a display and a working GPU are required for builds
-you publish. The pinned Unity environment bundles Mesa for AMD and Intel GPUs.
-Other drivers, such as NVIDIA's proprietary driver, need host graphics exposed
-to Nix through [nixGL](https://github.com/nix-community/nixGL), for example
-`nixGL ./build.sh ./Build`. `build.sh` prints a warning when the Unity log shows
+you publish. Unity uses the host's GPU drivers directly: `mesa` with
+`vulkan-radeon` or `vulkan-intel` for AMD and Intel, or `nvidia-utils` for
+NVIDIA. `build.sh` prints a warning when the Unity log shows
 that no GPU was available (`NullGfxDevice`). On a machine without one,
 `MATEENGINE_BUILD_HEADLESS=1` restores the `-nographics` build for quick
 iteration; `build.sh` then prints a warning, and the result should not be
@@ -63,14 +68,13 @@ checkout still downloads LlamaLib; if `build.sh` then warns that the player
 bundles non-Linux files, run it again.
 
 To build from the Unity Editor GUI instead, first sign in and activate a license
-with `nix run .#unityhub`, which the Editor requires, then build the plugin and
-open the project:
+in Unity Hub (AUR package `unityhub`), which the Editor requires, then build the
+plugin and open the project:
 
 ```sh
-nix develop
 ./scripts/build-file-browser.sh
 ./scripts/prepare-llamalib.sh
-unity -projectPath "$PWD"
+~/.local/share/mate-engine/unity/6000.2.6f2/Editor/Unity -projectPath "$PWD"
 ```
 
 Choose **MateEngine > Build Linux Player...** and select `Build`. The menu uses
@@ -80,21 +84,19 @@ the same scene and build options as `build.sh`. Then package the presenter:
 ./scripts/package-build.sh ./Build
 ```
 
-To prepare a copyable player directory intended to run without Nix on the
-destination machine, run:
+To prepare a copyable player directory for another machine, run:
 
 ```sh
-nix run .#export-portable -- ./Build ./MateEngine-portable
+./scripts/export-portable.sh ./Build ./MateEngine-portable
 ```
 
 The output directory must not already exist. The command copies the Unity
-player, its data and launcher, and replaces the Nix-store-dependent presenter
-with a pinned AppImage bundle containing its Qt runtime. Run
+player, its data, its launcher, and the presenter. Run
 `env -u DISPLAY ./launch.sh` from inside the exported directory. This remains
 an x86-64 Linux build for KDE Plasma 6 native Wayland, not a universal Linux
-binary: system graphics drivers, KWin layer-shell support, audio and GTK
-libraries, and compatible host libraries for Unity's native plugins are still
-required. AppImage runtime support is also needed. The exporter intentionally
+binary: the presenter links against the host Qt 6, so the destination needs
+`qt6-base`, `qt6-wayland`, and `layer-shell-qt`, plus graphics drivers, audio
+and GTK libraries, and compatible host libraries for Unity's native plugins. The exporter intentionally
 omits local logs and debug output. Test the exported directory on the target
 machine before distribution; that cross-system launch is not yet validated.
 
@@ -196,31 +198,31 @@ frame transport needs a vertical flip.
 The presenter can show its built-in translucent test shape without Unity:
 
 ```sh
-env -u DISPLAY QT_QPA_PLATFORM=wayland nix run .#wayland-presenter
+./scripts/build-wayland-presenter.sh
+env -u DISPLAY QT_QPA_PLATFORM=wayland ./Native/WaylandPresenter/build/matee-wayland-presenter
 ```
 
 For protocol diagnostics:
 
 ```sh
 env -u DISPLAY WAYLAND_DEBUG=client QT_QPA_PLATFORM=wayland \
-  nix run .#wayland-presenter 2>wayland-presenter.log
+  ./Native/WaylandPresenter/build/matee-wayland-presenter 2>wayland-presenter.log
 rg 'get_layer_surface|set_input_region' wayland-presenter.log
 ```
 
 ## Development and troubleshooting
 
-Run the Unity Editor from the pinned environment with `nix develop` followed by
-`unity -projectPath "$PWD"`. Unity Hub is used for sign-in and license
-activation, not for selecting a different Editor version:
-
-```sh
-nix run .#unityhub
-```
+Run the pinned Unity Editor with
+`~/.local/share/mate-engine/unity/6000.2.6f2/Editor/Unity -projectPath "$PWD"`.
+Unity Hub (AUR package `unityhub`) is used for sign-in and license activation,
+not for selecting a different Editor version. If the Editor fails to start with
+a missing `libxml2.so.2`, install `libxml2-legacy` (included in
+`install-arch-deps.sh`).
 
 If the splash screen is broken, the player was probably built without a
-graphics device (`-nographics`, `MATEENGINE_BUILD_HEADLESS=1`, or no GPU access
-inside Nix). Check the build output for the GPU warning, then rebuild from a
-graphical session with plain `./build.sh`, using nixGL if needed.
+graphics device (`-nographics`, `MATEENGINE_BUILD_HEADLESS=1`, or missing GPU
+drivers). Check the build output for the GPU warning, then rebuild from a
+graphical session with plain `./build.sh`.
 
 If the model is upside down, retain `Player.log` and check the logged graphics
 API and vertical-flip decision. If animation is choppy, compare the default 60
@@ -254,10 +256,9 @@ must be reported as tested on the actual configuration rather than inferred from
 a different setup.
 # Portable file-browser dependencies
 
-Build with `MATEENGINE_PORTABLE_PLUGIN=1 ./build.sh <output>` inside the pinned
-Nix development environment before portable export. This mode rewrites the
-embedded file dialog to use `/lib64/ld-linux-x86-64.so.2` and removes development
-RPATHs from both the dialog and its plugin. The destination must provide glibc
-compatible with the pinned build (2.40 or newer), GTK 3, and its shared-library
-dependencies. The presenter remains self-contained in its AppImage. This mode
+Build with `MATEENGINE_PORTABLE_PLUGIN=1 ./build.sh <output>` before portable
+export. This mode makes sure the embedded file dialog uses
+`/lib64/ld-linux-x86-64.so.2` and removes any RPATHs from both the dialog and
+its plugin. The destination must provide glibc at least as new as the build
+machine's, GTK 3, and its shared-library dependencies. This mode
 changes only the built native plugin; it does not change host settings.
